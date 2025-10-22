@@ -11,44 +11,74 @@ jobs:
   windows:
     name: Windows Build
     runs-on: windows-latest
+    env:
+      OBS_VERSION: '32.0.1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup OBS Studio
-        uses: obsproject/obs-studio-ci@v1
-        with:
-          obs-version: '32.0.1'
-          obs-deps-version: '2024-08-15'
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Download OBS Studio
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/obsproject/obs-studio/releases/download/${{ env.OBS_VERSION }}/OBS-Studio-${{ env.OBS_VERSION }}-Windows-x64.zip"
+          Write-Host "Downloading OBS Studio ${{ env.OBS_VERSION }}..."
+          Invoke-WebRequest -Uri $url -OutFile obs-studio.zip
+          Write-Host "Extracting..."
+          Expand-Archive -Path obs-studio.zip -DestinationPath obs-studio
+          Write-Host "OBS Studio extracted to: $PWD\obs-studio"
+          Get-ChildItem obs-studio
+
+      - name: Download OBS Source Headers
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://github.com/obsproject/obs-studio/archive/refs/tags/${{ env.OBS_VERSION }}.zip"
+          Write-Host "Downloading OBS Studio source headers..."
+          Invoke-WebRequest -Uri $url -OutFile obs-source.zip
+          Write-Host "Extracting source..."
+          Expand-Archive -Path obs-source.zip -DestinationPath obs-source
+          Write-Host "Creating include directory structure..."
+          New-Item -ItemType Directory -Force -Path obs-studio\include
+          Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\*" -Destination obs-studio\include -Recurse -Force
+          Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\UI\obs-frontend-api\*" -Destination obs-studio\include -Recurse -Force
 
       - name: Configure
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/obs-studio"
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}\obs-studio"
 
       - name: Build
         run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path package\bin\64bit
+          New-Item -ItemType Directory -Force -Path package\data
+          Copy-Item build\Release\obs-timestamp-plugin.dll package\bin\64bit\
+          Copy-Item -Path data\* -Destination package\data\ -Recurse
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: obs-timestamp-plugin-windows
-          path: |
-            build/Release/*.dll
-            data/
+          path: package/
 
   linux:
     name: Linux Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Add OBS Studio PPA
+        run: |
+          sudo add-apt-repository ppa:obsproject/obs-studio
+          sudo apt-get update
+
       - name: Install Dependencies
         run: |
-          sudo apt-get update
           sudo apt-get install -y build-essential cmake libobs-dev obs-studio
 
       - name: Configure
@@ -57,35 +87,44 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      - name: Package
+        run: |
+          mkdir -p package/bin/64bit package/data
+          cp build/libobs-timestamp-plugin.so package/bin/64bit/
+          cp -r data/* package/data/
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: obs-timestamp-plugin-linux
-          path: |
-            build/*.so
-            data/
+          path: package/
 
   macos:
     name: macOS Build
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
-          brew install cmake obs
+          brew install cmake
+          brew install --cask obs
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_PREFIX_PATH=/usr/local
+        run: cmake -S . -B build -DCMAKE_PREFIX_PATH=/Applications/OBS.app/Contents/Resources
 
       - name: Build
         run: cmake --build build
+
+      - name: Package
+        run: |
+          mkdir -p package/bin package/data
+          cp build/libobs-timestamp-plugin.so package/bin/
+          cp -r data/* package/data/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: obs-timestamp-plugin-macos
-          path: |
-            build/*.so
-            data/
+          path: package/
