@@ -19,6 +19,18 @@ static void get_default_output_path(char *buffer, size_t size)
     }
 }
 
+// Ensure the config directory exists
+static void ensure_config_directory_exists(void)
+{
+    const char *config_path = obs_module_config_path("");
+    if (config_path) {
+        // Create the directory if it doesn't exist
+        os_mkdirs(config_path);
+        blog(LOG_INFO, "Timestamp Plugin: Config directory: %s", config_path);
+        bfree((void *)config_path);
+    }
+}
+
 // Save a timestamp to the output file in JSON Lines format
 void save_timestamp(uint64_t timestamp_ms, const char *comment, const char *name, const char *color)
 {
@@ -118,6 +130,9 @@ static void frontend_event_callback(enum obs_frontend_event event, void *data)
 // Initialize the plugin
 void init_timestamp_plugin(void)
 {
+    // Ensure the config directory exists
+    ensure_config_directory_exists();
+
     // Set default output path
     get_default_output_path(output_path, sizeof(output_path));
     blog(LOG_INFO, "Timestamp Plugin: Using output file: %s", output_path);
