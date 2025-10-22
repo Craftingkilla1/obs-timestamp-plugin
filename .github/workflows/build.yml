@@ -44,11 +44,15 @@ jobs:
           # Copy libobs headers
           Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\*.h" -Destination obs-studio\include\obs -Force
           Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\*.hpp" -Destination obs-studio\include\obs -Force
+          # Copy util headers (required by obs.h)
+          Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\util" -Destination obs-studio\include\obs -Recurse -Force
+          # Copy other required subdirectories
+          Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\graphics" -Destination obs-studio\include\obs -Recurse -Force
+          Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\media-io" -Destination obs-studio\include\obs -Recurse -Force
+          Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\libobs\callback" -Destination obs-studio\include\obs -Recurse -Force
           # Copy frontend API headers
           Copy-Item -Path "obs-source\obs-studio-${{ env.OBS_VERSION }}\frontend\api\*.h" -Destination obs-studio\include\obs -Force -ErrorAction SilentlyContinue
           Write-Host "Include directory created successfully"
-          Write-Host "Listing headers:"
-          Get-ChildItem obs-studio\include\obs -Name
 
       - name: Create Import Libraries
         run: |
