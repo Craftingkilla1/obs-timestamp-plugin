@@ -31,6 +31,81 @@ static void ensure_config_directory_exists(void)
     }
 }
 
+// Load hotkey data from OBS global config
+void load_hotkey_data(void)
+{
+    if (timestamp_hotkey_id == OBS_INVALID_HOTKEY_ID) {
+        blog(LOG_WARNING, "Timestamp Plugin: Cannot load hotkey data - hotkey not registered");
+        return;
+    }
+
+    // Get OBS's global config
+    config_t *config = obs_frontend_get_profile_config();
+    if (!config) {
+        blog(LOG_WARNING, "Timestamp Plugin: Could not get profile config");
+        return;
+    }
+
+    // Load hotkey data from the "Hotkeys" section
+    obs_data_t *data = obs_data_create();
+
+    // Get the hotkey array from config
+    obs_data_array_t *array = obs_data_array_create();
+
+    // Try to load from config file
+    const char *json_str = config_get_string(config, "Hotkeys", "timestamp_marker");
+    if (json_str && *json_str) {
+        obs_data_t *temp = obs_data_create_from_json(json_str);
+        if (temp) {
+            obs_data_array_t *bindings = obs_data_get_array(temp, "bindings");
+            if (bindings) {
+                array = bindings;
+                blog(LOG_INFO, "Timestamp Plugin: Loading hotkey bindings");
+            }
+            obs_data_release(temp);
+        }
+    }
+
+    // Load into hotkey
+    obs_hotkey_load(timestamp_hotkey_id, array);
+
+    obs_data_array_release(array);
+    obs_data_release(data);
+
+    blog(LOG_INFO, "Timestamp Plugin: Hotkey data loaded");
+}
+
+// Save hotkey data to OBS global config
+void save_hotkey_data(void)
+{
+    if (timestamp_hotkey_id == OBS_INVALID_HOTKEY_ID) {
+        blog(LOG_WARNING, "Timestamp Plugin: Cannot save hotkey data - hotkey not registered");
+        return;
+    }
+
+    // Get OBS's global config
+    config_t *config = obs_frontend_get_profile_config();
+    if (!config) {
+        blog(LOG_WARNING, "Timestamp Plugin: Could not get profile config");
+        return;
+    }
+
+    // Save hotkey data
+    obs_data_array_t *array = obs_hotkey_save(timestamp_hotkey_id);
+
+    // Convert to JSON and save to config
+    obs_data_t *data = obs_data_create();
+    obs_data_set_array(data, "bindings", array);
+
+    const char *json_str = obs_data_get_json(data);
+    config_set_string(config, "Hotkeys", "timestamp_marker", json_str);
+
+    obs_data_array_release(array);
+    obs_data_release(data);
+
+    blog(LOG_INFO, "Timestamp Plugin: Hotkey data saved");
+}
+
 // Save a timestamp to the output file in JSON Lines format
 void save_timestamp(uint64_t timestamp_ms, const char *comment, const char *name, const char *color)
 {

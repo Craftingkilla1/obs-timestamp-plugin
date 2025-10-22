@@ -25,3 +25,17 @@ void obs_module_unload(void)
     blog(LOG_INFO, "OBS Timestamp Plugin unloading");
     free_timestamp_plugin();
 }
+
+// This function is called by OBS to load hotkey settings
+void obs_module_post_load(void)
+{
+    blog(LOG_INFO, "OBS Timestamp Plugin post_load called");
+    load_hotkey_data();
+}
+
+// This function is called by OBS before saving settings
+void obs_module_save(void)
+{
+    blog(LOG_INFO, "OBS Timestamp Plugin save called");
+    save_hotkey_data();
+}

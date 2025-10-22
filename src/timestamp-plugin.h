@@ -3,6 +3,7 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <util/platform.h>
+#include <util/config-file.h>
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
@@ -14,6 +15,10 @@ extern "C" {
 // Plugin initialization
 void init_timestamp_plugin(void);
 void free_timestamp_plugin(void);
+
+// Hotkey save/load (called by OBS)
+void load_hotkey_data(void);
+void save_hotkey_data(void);
 
 // Hotkey callback
 void timestamp_hotkey_callback(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey, bool pressed);
