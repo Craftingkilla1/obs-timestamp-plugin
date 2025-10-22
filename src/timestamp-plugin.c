@@ -6,7 +6,6 @@ static bool recording_active = false;
 static uint64_t recording_start_time = 0;
 static char output_path[512] = {0};
 static uint64_t marker_counter = 0;
-static obs_data_t *plugin_settings = NULL;
 
 // Get the default output path
 static void get_default_output_path(char *buffer, size_t size)
@@ -29,58 +28,6 @@ static void ensure_config_directory_exists(void)
         os_mkdirs(config_path);
         blog(LOG_INFO, "Timestamp Plugin: Config directory: %s", config_path);
         bfree((void *)config_path);
-    }
-}
-
-// Save plugin configuration
-static void save_config(void)
-{
-    if (!plugin_settings) {
-        return;
-    }
-
-    const char *config_file = obs_module_config_path("config.json");
-    if (config_file) {
-        // Save hotkey
-        obs_data_array_t *hotkey_data = obs_hotkey_save(timestamp_hotkey_id);
-        obs_data_set_array(plugin_settings, "timestamp_hotkey", hotkey_data);
-        obs_data_array_release(hotkey_data);
-
-        // Write to file
-        if (!obs_data_save_json(plugin_settings, config_file)) {
-            blog(LOG_WARNING, "Timestamp Plugin: Failed to save config to %s", config_file);
-        } else {
-            blog(LOG_INFO, "Timestamp Plugin: Config saved to %s", config_file);
-        }
-
-        bfree((void *)config_file);
-    }
-}
-
-// Load plugin configuration
-static void load_config(void)
-{
-    const char *config_file = obs_module_config_path("config.json");
-    if (config_file) {
-        plugin_settings = obs_data_create_from_json_file(config_file);
-        if (!plugin_settings) {
-            plugin_settings = obs_data_create();
-            blog(LOG_INFO, "Timestamp Plugin: Creating new config");
-        } else {
-            // Load hotkey
-            obs_data_array_t *hotkey_data = obs_data_get_array(plugin_settings, "timestamp_hotkey");
-            if (hotkey_data) {
-                obs_hotkey_load(timestamp_hotkey_id, hotkey_data);
-                obs_data_array_release(hotkey_data);
-                blog(LOG_INFO, "Timestamp Plugin: Config loaded from %s", config_file);
-            }
-        }
-
-        bfree((void *)config_file);
-    }
-
-    if (!plugin_settings) {
-        plugin_settings = obs_data_create();
     }
 }
 
@@ -190,7 +137,7 @@ void init_timestamp_plugin(void)
     get_default_output_path(output_path, sizeof(output_path));
     blog(LOG_INFO, "Timestamp Plugin: Using output file: %s", output_path);
 
-    // Register hotkey
+    // Register hotkey - OBS automatically handles save/load for frontend hotkeys
     timestamp_hotkey_id = obs_hotkey_register_frontend(
         "timestamp_marker",
         "Create Timestamp Marker",
@@ -200,11 +147,9 @@ void init_timestamp_plugin(void)
     if (timestamp_hotkey_id == OBS_INVALID_HOTKEY_ID) {
         blog(LOG_ERROR, "Timestamp Plugin: Failed to register hotkey");
     } else {
-        blog(LOG_INFO, "Timestamp Plugin: Hotkey registered successfully");
+        blog(LOG_INFO, "Timestamp Plugin: Hotkey registered successfully (ID: %llu)",
+             (unsigned long long)timestamp_hotkey_id);
     }
-
-    // Load saved configuration (including hotkey binding)
-    load_config();
 
     // Register frontend event callbacks
     obs_frontend_add_event_callback(frontend_event_callback, NULL);
@@ -213,10 +158,7 @@ void init_timestamp_plugin(void)
 // Clean up plugin resources
 void free_timestamp_plugin(void)
 {
-    // Save configuration before cleanup
-    save_config();
-
-    // Unregister hotkey
+    // Unregister hotkey - OBS automatically saves hotkey state
     if (timestamp_hotkey_id != OBS_INVALID_HOTKEY_ID) {
         obs_hotkey_unregister(timestamp_hotkey_id);
         timestamp_hotkey_id = OBS_INVALID_HOTKEY_ID;
@@ -224,12 +166,6 @@ void free_timestamp_plugin(void)
 
     // Remove frontend event callback
     obs_frontend_remove_event_callback(frontend_event_callback, NULL);
-
-    // Release settings
-    if (plugin_settings) {
-        obs_data_release(plugin_settings);
-        plugin_settings = NULL;
-    }
 
     blog(LOG_INFO, "Timestamp Plugin: Cleaned up");
 }
