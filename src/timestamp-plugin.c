@@ -1,4 +1,5 @@
 #include "timestamp-plugin.h"
+#include <time.h>
 
 // Global state
 static obs_hotkey_id timestamp_hotkey_id = OBS_INVALID_HOTKEY_ID;
@@ -6,6 +7,7 @@ static bool recording_active = false;
 static uint64_t recording_start_time = 0;
 static char output_path[512] = {0};
 static uint64_t marker_counter = 0;
+static char recording_output_dir[512] = {0};
 
 // Get the default output path
 static void get_default_output_path(char *buffer, size_t size)
@@ -28,6 +30,37 @@ static void ensure_config_directory_exists(void)
         os_mkdirs(config_path);
         blog(LOG_INFO, "Timestamp Plugin: Config directory: %s", config_path);
         bfree((void *)config_path);
+    }
+}
+
+// Get the recording output directory from OBS settings
+static void get_recording_output_dir(char *buffer, size_t size)
+{
+    config_t *config = obs_frontend_get_profile_config();
+    if (!config) {
+        blog(LOG_WARNING, "Timestamp Plugin: Could not get profile config");
+        buffer[0] = '\0';
+        return;
+    }
+
+    // Check if using advanced output mode or simple mode
+    const char *mode = config_get_string(config, "Output", "Mode");
+    const char *rec_path = NULL;
+
+    if (mode && strcmp(mode, "Advanced") == 0) {
+        // Advanced mode - check RecFilePath
+        rec_path = config_get_string(config, "AdvOut", "RecFilePath");
+    } else {
+        // Simple mode - check FilePath
+        rec_path = config_get_string(config, "SimpleOutput", "FilePath");
+    }
+
+    if (rec_path && *rec_path) {
+        snprintf(buffer, size, "%s", rec_path);
+        blog(LOG_INFO, "Timestamp Plugin: Recording output directory: %s", buffer);
+    } else {
+        buffer[0] = '\0';
+        blog(LOG_WARNING, "Timestamp Plugin: Could not determine recording output directory");
     }
 }
 
@@ -170,12 +203,32 @@ static void frontend_event_callback(enum obs_frontend_event event, void *data)
         recording_start_time = os_gettime_ns() / 1000000; // Milliseconds
         marker_counter = 0;
 
+        // Get the recording output directory
+        get_recording_output_dir(recording_output_dir, sizeof(recording_output_dir));
+
         blog(LOG_INFO, "Timestamp Plugin: Recording started, clearing timestamp file");
 
         // Clear/create new timestamp file for this recording session
         if (output_path[0]) {
             FILE *file = fopen(output_path, "w");
             if (file) {
+                // Get video info from OBS
+                obs_video_info ovi;
+                obs_get_video_info(&ovi);
+
+                // Get current timestamp for metadata
+                time_t now = time(NULL);
+                char time_str[64];
+                struct tm *tm_info = localtime(&now);
+                strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
+
+                // Write metadata header
+                fprintf(file, "{\"metadata\": {\"recording_path\": \"%s\", \"timestamp\": \"%s\", \"fps_num\": %u, \"fps_den\": %u}}\n",
+                        recording_output_dir[0] ? recording_output_dir : "",
+                        time_str,
+                        ovi.fps_num,
+                        ovi.fps_den);
+
                 // Add initial marker at 0
                 fprintf(file, "{\"timestamp_ms\": 0, \"comment\": \"Recording Start\", \"name\": \"\", \"color\": \"blue\"}\n");
                 fclose(file);
