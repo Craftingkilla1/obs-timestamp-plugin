@@ -55,16 +55,15 @@ jobs:
 
           # Create obsconfig.h from template
           Write-Host "Generating obsconfig.h..."
-          $obsconfig = @"
-#pragma once
-#define OBS_VERSION "32.0.1"
-#define OBS_DATA_PATH "../data"
-#define OBS_INSTALL_PREFIX ""
-#define OBS_PLUGIN_DESTINATION "obs-plugins/64bit"
-#define OBS_RELATIVE_PREFIX "../"
-#define OBS_UNIX_STRUCTURE 0
-"@
-          Set-Content -Path "obs-studio\include\obs\obsconfig.h" -Value $obsconfig
+          @'
+          #pragma once
+          #define OBS_VERSION "32.0.1"
+          #define OBS_DATA_PATH "../data"
+          #define OBS_INSTALL_PREFIX ""
+          #define OBS_PLUGIN_DESTINATION "obs-plugins/64bit"
+          #define OBS_RELATIVE_PREFIX "../"
+          #define OBS_UNIX_STRUCTURE 0
+          '@ | Out-File -FilePath "obs-studio\include\obs\obsconfig.h" -Encoding ASCII
           Write-Host "Include directory created successfully"
 
       - name: Create Import Libraries
