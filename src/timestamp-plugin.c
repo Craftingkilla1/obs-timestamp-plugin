@@ -1,5 +1,6 @@
 #include "timestamp-plugin.h"
 #include <time.h>
+#include <stdlib.h>
 
 // Global state
 static obs_hotkey_id timestamp_hotkey_id = OBS_INVALID_HOTKEY_ID;
@@ -279,6 +280,44 @@ static void frontend_event_callback(enum obs_frontend_event event, void *data)
             save_timestamp(timestamp_ms, "Recording End", "", "green");
 
             blog(LOG_INFO, "Timestamp Plugin: Recording stopped, final timestamp: %" PRIu64 "ms", timestamp_ms);
+
+            // Auto-convert to XML if user created markers (marker_counter > 0)
+            if (marker_counter > 0) {
+                blog(LOG_INFO, "Timestamp Plugin: %llu marker(s) created, running Python converter...",
+                     (unsigned long long)marker_counter);
+
+                // Get the plugin's data directory where the Python script should be
+                const char *plugin_data_path = obs_get_module_data_path(obs_current_module());
+                if (plugin_data_path) {
+                    char python_script[1024];
+                    char command[2048];
+
+                    snprintf(python_script, sizeof(python_script), "%s/timestamp_to_premiere.py", plugin_data_path);
+
+                    // Build command to run Python script
+                    // On Windows, use python or python3
+                    snprintf(command, sizeof(command), "python \"%s\" \"%s\"", python_script, output_path);
+
+                    blog(LOG_INFO, "Timestamp Plugin: Executing: %s", command);
+
+                    // Execute the Python script
+                    int result = system(command);
+
+                    if (result == 0) {
+                        blog(LOG_INFO, "Timestamp Plugin: XML markers generated successfully");
+                    } else {
+                        blog(LOG_WARNING, "Timestamp Plugin: Python converter failed with code %d", result);
+                        blog(LOG_WARNING, "Timestamp Plugin: You can manually run: python \"%s\" \"%s\"",
+                             python_script, output_path);
+                    }
+
+                    bfree((void *)plugin_data_path);
+                } else {
+                    blog(LOG_ERROR, "Timestamp Plugin: Could not get plugin data path");
+                }
+            } else {
+                blog(LOG_INFO, "Timestamp Plugin: No markers created, skipping XML conversion");
+            }
         }
         recording_active = false;
         break;
