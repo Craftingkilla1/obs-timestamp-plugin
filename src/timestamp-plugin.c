@@ -212,9 +212,42 @@ static void frontend_event_callback(enum obs_frontend_event event, void *data)
         if (output_path[0]) {
             FILE *file = fopen(output_path, "w");
             if (file) {
-                // Get video info from OBS
-                obs_video_info ovi;
-                obs_get_video_info(&ovi);
+                // Get FPS from OBS config
+                config_t *config = obs_frontend_get_profile_config();
+                uint32_t fps_num = 60;
+                uint32_t fps_den = 1;
+
+                if (config) {
+                    // Read FPS type and value from config
+                    const char *fps_type = config_get_string(config, "Video", "FPSType");
+
+                    if (fps_type && strcmp(fps_type, "2") == 0) {
+                        // Common FPS (FPSCommon setting)
+                        const char *fps_common = config_get_string(config, "Video", "FPSCommon");
+                        if (fps_common) {
+                            if (strcmp(fps_common, "60") == 0) {
+                                fps_num = 60; fps_den = 1;
+                            } else if (strcmp(fps_common, "59.94") == 0) {
+                                fps_num = 60000; fps_den = 1001;
+                            } else if (strcmp(fps_common, "30") == 0) {
+                                fps_num = 30; fps_den = 1;
+                            } else if (strcmp(fps_common, "29.97") == 0) {
+                                fps_num = 30000; fps_den = 1001;
+                            } else if (strcmp(fps_common, "25") == 0) {
+                                fps_num = 25; fps_den = 1;
+                            } else if (strcmp(fps_common, "24") == 0) {
+                                fps_num = 24; fps_den = 1;
+                            } else if (strcmp(fps_common, "23.976") == 0) {
+                                fps_num = 24000; fps_den = 1001;
+                            }
+                        }
+                    } else {
+                        // Fractional FPS (FPSNum/FPSDen)
+                        fps_num = (uint32_t)config_get_uint(config, "Video", "FPSNum");
+                        fps_den = (uint32_t)config_get_uint(config, "Video", "FPSDen");
+                        if (fps_den == 0) fps_den = 1; // Prevent division by zero
+                    }
+                }
 
                 // Get current timestamp for metadata
                 time_t now = time(NULL);
@@ -226,8 +259,8 @@ static void frontend_event_callback(enum obs_frontend_event event, void *data)
                 fprintf(file, "{\"metadata\": {\"recording_path\": \"%s\", \"timestamp\": \"%s\", \"fps_num\": %u, \"fps_den\": %u}}\n",
                         recording_output_dir[0] ? recording_output_dir : "",
                         time_str,
-                        ovi.fps_num,
-                        ovi.fps_den);
+                        fps_num,
+                        fps_den);
 
                 // Add initial marker at 0
                 fprintf(file, "{\"timestamp_ms\": 0, \"comment\": \"Recording Start\", \"name\": \"\", \"color\": \"blue\"}\n");
