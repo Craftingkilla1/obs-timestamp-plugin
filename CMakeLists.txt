@@ -34,19 +34,14 @@ endif()
 # Include directories
 target_include_directories(obs-timestamp-plugin PRIVATE ${LIBOBS_INCLUDE_DIR})
 
-# On Windows, link against the DLLs directly (they'll be delay-loaded)
+# Platform-specific linking
 if(WIN32)
-    find_file(OBS_DLL NAMES obs.dll PATHS ${LIBOBS_LIB_DIR} REQUIRED)
-    find_file(OBS_FRONTEND_DLL NAMES obs-frontend-api.dll PATHS ${LIBOBS_LIB_DIR})
-
-    # For Windows, we need to tell the linker where to find the DLLs
-    # But since it's a plugin loaded by OBS, the symbols will be resolved at runtime
-    target_link_libraries(obs-timestamp-plugin PRIVATE ${OBS_DLL})
-    if(OBS_FRONTEND_DLL)
-        target_link_libraries(obs-timestamp-plugin PRIVATE ${OBS_FRONTEND_DLL})
-    endif()
+    # On Windows, OBS plugins are loaded dynamically and symbols are resolved at runtime
+    # We don't need to link against anything - just export our plugin functions
+    # Add linker flags to ignore unresolved external symbols (they'll be provided by OBS at runtime)
+    target_link_options(obs-timestamp-plugin PRIVATE /FORCE:UNRESOLVED)
 else()
-    # On Linux/macOS, find the actual libraries
+    # On Linux/macOS, find and link the actual libraries
     find_library(OBS_LIB NAMES obs libobs PATHS ${LIBOBS_LIB_DIR} REQUIRED)
     find_library(OBS_FRONTEND_LIB NAMES obs-frontend-api libobs-frontend-api PATHS ${LIBOBS_LIB_DIR})
 
