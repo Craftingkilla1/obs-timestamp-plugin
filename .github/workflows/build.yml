@@ -70,16 +70,67 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           Write-Host "Creating lib directory..."
-          New-Item -ItemType Directory -Force -Path obs-studio\lib
+          New-Item -ItemType Directory -Force -Path obs-studio\bin\64bit
 
-          Write-Host "Listing DLL files:"
-          Get-ChildItem obs-studio\bin\64bit\*.dll -Name
+          Write-Host "Checking for existing .lib files..."
+          $existingLibs = Get-ChildItem obs-studio\bin\64bit\*.lib -ErrorAction SilentlyContinue
+          if ($existingLibs) {
+            Write-Host "Found existing .lib files:"
+            $existingLibs | ForEach-Object { Write-Host "  - $($_.Name)" }
+          } else {
+            Write-Host "No .lib files found - attempting to create from DLLs..."
 
-          Write-Host "Creating import libraries from DLLs..."
+            # Find dumpbin and lib tools (part of Visual Studio)
+            $vcToolsPath = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "dumpbin.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).DirectoryName
 
-          # We'll create stub .lib files since we're building a plugin that loads at runtime
-          # For a runtime-loaded plugin, we don't actually need to link against the .lib files
-          # The plugin will use the DLLs at runtime
+            if ($vcToolsPath) {
+              Write-Host "Found Visual Studio tools at: $vcToolsPath"
+              $env:PATH = "$vcToolsPath;$env:PATH"
+
+              # Try to create import libraries for obs.dll and obs-frontend-api.dll
+              $dlls = @("obs.dll", "obs-frontend-api.dll")
+              foreach ($dll in $dlls) {
+                $dllPath = "obs-studio\bin\64bit\$dll"
+                if (Test-Path $dllPath) {
+                  Write-Host "Processing $dll..."
+                  $baseName = [System.IO.Path]::GetFileNameWithoutExtension($dll)
+                  $defFile = "obs-studio\bin\64bit\$baseName.def"
+                  $libFile = "obs-studio\bin\64bit\$baseName.lib"
+
+                  # Extract exports using dumpbin
+                  & dumpbin /exports "$dllPath" | Out-File -FilePath "$baseName-exports.txt"
+
+                  # Parse exports and create .def file
+                  $exports = Get-Content "$baseName-exports.txt" | Select-String -Pattern "^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(\S+)"
+
+                  if ($exports.Count -gt 0) {
+                    @"
+EXPORTS
+"@ | Out-File -FilePath "$defFile" -Encoding ASCII
+
+                    foreach ($export in $exports) {
+                      $functionName = $export.Matches.Groups[1].Value
+                      if ($functionName -notmatch "^_" -and $functionName -notmatch "deleting") {
+                        "    $functionName" | Out-File -FilePath "$defFile" -Append -Encoding ASCII
+                      }
+                    }
+
+                    # Create .lib from .def
+                    & lib /def:"$defFile" /out:"$libFile" /machine:x64
+
+                    if (Test-Path $libFile) {
+                      Write-Host "Created $libFile successfully"
+                    } else {
+                      Write-Host "Failed to create $libFile"
+                    }
+                  }
+                }
+              }
+            } else {
+              Write-Host "WARNING: Could not find Visual Studio tools"
+              Write-Host "Build may fail if .lib files are not present"
+            }
+          }
 
           Write-Host "Library setup complete"
 

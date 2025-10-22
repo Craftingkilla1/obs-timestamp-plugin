@@ -36,10 +36,27 @@ target_include_directories(obs-timestamp-plugin PRIVATE ${LIBOBS_INCLUDE_DIR})
 
 # Platform-specific linking
 if(WIN32)
-    # On Windows, OBS plugins are loaded dynamically and symbols are resolved at runtime
-    # We don't need to link against anything - just export our plugin functions
-    # Add linker flags to ignore unresolved external symbols (they'll be provided by OBS at runtime)
-    target_link_options(obs-timestamp-plugin PRIVATE /FORCE:UNRESOLVED)
+    # On Windows, we need to link against the import libraries from OBS's bin directory
+    # These .lib files provide the symbol information needed at link time
+    find_library(OBS_LIB
+        NAMES obs
+        PATHS "${CMAKE_PREFIX_PATH}/bin/64bit"
+        REQUIRED
+        NO_DEFAULT_PATH)
+    find_library(OBS_FRONTEND_LIB
+        NAMES obs-frontend-api
+        PATHS "${CMAKE_PREFIX_PATH}/bin/64bit"
+        NO_DEFAULT_PATH)
+
+    target_link_libraries(obs-timestamp-plugin PRIVATE ${OBS_LIB})
+    if(OBS_FRONTEND_LIB)
+        target_link_libraries(obs-timestamp-plugin PRIVATE ${OBS_FRONTEND_LIB})
+        message(STATUS "Found obs-frontend-api: ${OBS_FRONTEND_LIB}")
+    else()
+        message(WARNING "obs-frontend-api library not found - frontend features may not work")
+    endif()
+
+    message(STATUS "Found obs library: ${OBS_LIB}")
 else()
     # On Linux/macOS, find and link the actual libraries
     find_library(OBS_LIB NAMES obs libobs PATHS ${LIBOBS_LIB_DIR} REQUIRED)
